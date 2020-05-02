@@ -3,7 +3,6 @@ from slackernetes import k, send_file, send_message, register, run
 import logging
 import re
 
-
 @register(r"(?:get|list) images in namespace (\S+)")
 def list_images(**payload):
     """
@@ -61,7 +60,7 @@ def pick_dev_env(**payload):
     logging.debug(f"found this k8s_ns: {k8s_ns}")
     
     if k8s_ns is None:
-        message = f"Hey <@{username['user']['id']}>, l'environnement `{namespace}` n'a été trouvé." 
+        message = f"Hey <@{username['user']['id']}>, l'environnement `{namespace}` n'a pas été trouvé." 
     elif k8s_ns and k8s_ns.metadata.labels.get('developer'):
         message = f"Hey <@{username['user']['id']}>, l'environnement `{namespace}` est utilisé par <@{k8s_ns.metadata.labels['developer']}>."
     else:
@@ -78,7 +77,7 @@ def pick_dev_env(**payload):
 @register(r"release (\S+)$")
 def pick_dev_env(**payload):
     """
-    Pick a specific environment
+    Release a specific environment
     """
     label_selector = 'env=dev'
     web_client = payload["web_client"]
@@ -98,7 +97,7 @@ def pick_dev_env(**payload):
     logging.debug(f"found this k8s_ns: {k8s_ns}")
     
     if k8s_ns is None:
-        message = f"Hey <@{username['user']['id']}>, l'environnement `{namespace}` n'a été trouvé."
+        message = f"Hey <@{username['user']['id']}>, l'environnement `{namespace}` n'a pas été trouvé."
     elif k8s_ns and k8s_ns.metadata.labels.get('developer') is None:
         message = f"Hey <@{username['user']['id']}>, l'environnement `{namespace}` est déjà libre."
     elif k8s_ns and k8s_ns.metadata.labels.get('developer') not in username['user']['id']:
@@ -113,6 +112,81 @@ def pick_dev_env(**payload):
         k.patch_namespace(namespace, body)
         message = f"Hey <!here>, l'environnement `{namespace}` est désormais libre. Bravo <@{username['user']['id']}> et à la prochaine."
     send_message(message, payload)
+
+
+@register(r"unregister (\S+)$")
+def unregister_dev_env(**payload):
+    """
+    Unregister a new environment
+    """
+    label_selector = 'env=dev'
+    web_client = payload["web_client"]
+    namespace = re.search(payload["regex"], payload["data"]["text"]).group(1)
+    username = web_client.users_info(user=payload["data"]["user"])
+    namespaces = k.list_namespace(label_selector=label_selector).items
+    
+    k8s_ns = next(
+        (
+            k8s_ns
+            for k8s_ns in namespaces
+            if namespace in k8s_ns.metadata.name
+        ),
+        None,
+    )
+
+    logging.debug(f"found this k8s_ns: {k8s_ns}")
+    
+    if k8s_ns:
+        body = {
+            "metadata": {
+                "labels": {
+                    "env": None,
+                    "developer": None}
+                }
+        }
+        
+        k.patch_namespace(namespace, body)
+        message = f"Hey <!here>, `{namespace}` a été retiré de la liste des environnements PROD 2.0." 
+    else:
+        message = f"Hey <@{username['user']['id']}>, Opps, nous ne pouvons pas retirer `{namespace}`."
+    
+    send_message(message, payload)
+
+@register(r"register (\S+)$")
+def register_dev_env(**payload):
+    """
+    Register a new environment
+    """
+    label_selector = 'env=dev'
+    web_client = payload["web_client"]
+    namespace = re.search(payload["regex"], payload["data"]["text"]).group(1)
+    username = web_client.users_info(user=payload["data"]["user"])
+    namespaces = k.list_namespace(label_selector=label_selector).items
+    all_namespaces = k.list_namespace().items
+    k8s_ns = next(
+        (
+            k8s_ns
+            for k8s_ns in namespaces
+            if namespace in k8s_ns.metadata.name
+        ),
+        None,
+    )
+
+    logging.debug(f"found this k8s_ns: {k8s_ns}")
+    
+    if (k8s_ns is None) and (namespace in all_namespaces):
+        body = {
+            "metadata": {
+                "labels": {
+                    "env": "dev"}
+                }
+        }
+        k.patch_namespace(namespace, body)
+        message = f"Hey <!here>, `{namespace}` a été ajouté à la liste des environnements PROD 2.0." 
+    else:
+        message = f"Hey <@{username['user']['id']}>, Opps, nous ne pouvons pas enregistrer `{namespace}`."
+    send_message(message, payload)
+
 
 @register(r"(?:get|list) pods? in namespace (\S+)$")
 def list_pods(**payload):
