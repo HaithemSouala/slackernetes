@@ -6,6 +6,7 @@ import kubernetes
 import re
 import time
 import atexit
+from slack.errors import SlackApiError
 
 try:
     kubernetes.config.load_incluster_config()
@@ -57,9 +58,21 @@ def send_message(message, payload):
     """
     Send a message to the channel
     """
-    payload["web_client"].chat_postMessage(
-        channel=payload["data"]["channel"], text=message['text']
-    )
+    logging.debug(f"message type: {type(message)}")
+    
+    if (message is None) or (isinstance(message, str)):
+        message = message
+    else:
+        message = message.get('text')
+
+    try:
+        response = payload["web_client"].chat_postMessage(
+            channel=payload['data']['channel'], 
+            text=message
+            )
+    except SlackApiError as e:
+        # You will get a SlackApiError if "ok" is False
+        assert e.response["error"]
 
 
 def send_file(message, file, payload):
@@ -110,7 +123,7 @@ def handle_message(**payload):
     log_request(payload, func)
     payload["regex"] = regex
     message = func(**payload)
-    if message.get('file'):
+    if (message is not None) and (message.get('file')):
         send_file(message, payload)
     else:
         send_message(message, payload)

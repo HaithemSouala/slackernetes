@@ -33,15 +33,15 @@ spec:
               command:
                 - pgrep
                 - python
-              initialDelaySeconds: 5
-              periodSeconds: 5
+            initialDelaySeconds: 5
+            periodSeconds: 5
           readinessProbe:
             exec:
               command:
                 - pgrep
                 - python
-              initialDelaySeconds: 5
-              periodSeconds: 5
+            initialDelaySeconds: 5
+            periodSeconds: 5
           env:
             - name: SLACK_API_TOKEN
               value: {{ required "A Bot User OAuth Access Token must be supplied" .Values.bot_oauth_token }}

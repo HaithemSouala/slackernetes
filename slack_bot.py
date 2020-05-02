@@ -19,6 +19,100 @@ def list_images(**payload):
     )
     send_message(message, payload)
 
+@register(r"list-envs")
+def list_dev_env(**payload):
+    """
+    List prod 2.0 available namespaces
+    """
+    label_selector = 'env=dev'
+    web_client = payload["web_client"]
+    username = web_client.users_info(user=payload["data"]["user"])
+    message = f"Hey <@{username['user']['id']}>, voici la liste des environnements prod 2.0:"+"\n".join(
+        [f"\n `{ns.metadata.name}` {get_developer(ns.metadata.labels.get('developer'))}" for ns in k.list_namespace(label_selector=label_selector).items]
+    )
+    send_message(message, payload)
+
+def get_developer(obj):
+    if obj:
+        return f"est utilisé par <@{obj}>"
+    else:
+        return "est libre :owl:"
+
+@register(r"pick (\S+)$")
+def pick_dev_env(**payload):
+    """
+    Pick a specific environment
+    """
+    label_selector = 'env=dev'
+    web_client = payload["web_client"]
+    namespace = re.search(payload["regex"], payload["data"]["text"]).group(1)
+    username = web_client.users_info(user=payload["data"]["user"])
+    namespaces = k.list_namespace(label_selector=label_selector).items
+    
+    k8s_ns = next(
+        (
+            k8s_ns
+            for k8s_ns in namespaces
+            if namespace in k8s_ns.metadata.name
+        ),
+        None,
+    )
+
+    logging.debug(f"found this k8s_ns: {k8s_ns}")
+    
+    if k8s_ns is None:
+        message = f"Hey <@{username['user']['id']}>, l'environnement `{namespace}` n'a été trouvé." 
+    elif k8s_ns and k8s_ns.metadata.labels.get('developer'):
+        message = f"Hey <@{username['user']['id']}>, l'environnement `{namespace}` est utilisé par <@{k8s_ns.metadata.labels['developer']}>."
+    else:
+        body = {
+            "metadata": {
+                "labels": {
+                    "developer": username['user']['id']}
+                }
+        }
+        k.patch_namespace(namespace, body)
+        message = f"Hey <!here>, l'environnement `{namespace}` a été attribué à <@{username['user']['id']}>."
+    send_message(message, payload)
+
+@register(r"release (\S+)$")
+def pick_dev_env(**payload):
+    """
+    Pick a specific environment
+    """
+    label_selector = 'env=dev'
+    web_client = payload["web_client"]
+    namespace = re.search(payload["regex"], payload["data"]["text"]).group(1)
+    username = web_client.users_info(user=payload["data"]["user"])
+    namespaces = k.list_namespace(label_selector=label_selector).items
+    
+    k8s_ns = next(
+        (
+            k8s_ns
+            for k8s_ns in namespaces
+            if namespace in k8s_ns.metadata.name
+        ),
+        None,
+    )
+
+    logging.debug(f"found this k8s_ns: {k8s_ns}")
+    
+    if k8s_ns is None:
+        message = f"Hey <@{username['user']['id']}>, l'environnement `{namespace}` n'a été trouvé."
+    elif k8s_ns and k8s_ns.metadata.labels.get('developer') is None:
+        message = f"Hey <@{username['user']['id']}>, l'environnement `{namespace}` est déjà libre."
+    elif k8s_ns and k8s_ns.metadata.labels.get('developer') not in username['user']['id']:
+        message = f"Hey <@{username['user']['id']}>, l'environnement `{namespace}` est utilisé par <@{k8s_ns.metadata.labels['developer']}>."
+    else:
+        body = {
+            "metadata": {
+                "labels": {
+                    "developer": None}
+                }
+        }
+        k.patch_namespace(namespace, body)
+        message = f"Hey <!here>, l'environnement `{namespace}` est désormais libre. Bravo <@{username['user']['id']}> et à la prochaine."
+    send_message(message, payload)
 
 @register(r"(?:get|list) pods? in namespace (\S+)$")
 def list_pods(**payload):
